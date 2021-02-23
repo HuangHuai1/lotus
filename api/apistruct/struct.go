@@ -43,6 +43,21 @@ import (
 // All permissions are listed in permissioned.go
 var _ = AllPermissions
 
+type SentinelStruct struct {
+	Internal struct {
+		WatchStart func(ctx context.Context) error `perm:"admin"`
+		WatchStop  func(ctx context.Context) error `perm:"admin"`
+	}
+}
+
+func (s *SentinelStruct) WatchStart(ctx context.Context) error {
+	return s.Internal.WatchStart(ctx)
+}
+
+func (s *SentinelStruct) WatchStop(ctx context.Context) error {
+	return s.Internal.WatchStop(ctx)
+}
+
 type CommonStruct struct {
 	Internal struct {
 		AuthVerify func(ctx context.Context, token string) ([]auth.Permission, error) `perm:"read"`
@@ -79,6 +94,7 @@ type CommonStruct struct {
 // FullNodeStruct implements API passing calls to user-provided function values.
 type FullNodeStruct struct {
 	CommonStruct
+	SentinelStruct
 
 	Internal struct {
 		ChainNotify                   func(context.Context) (<-chan []*api.HeadChange, error)                                                            `perm:"read"`
@@ -1835,3 +1851,4 @@ var _ api.StorageMiner = &StorageMinerStruct{}
 var _ api.WorkerAPI = &WorkerStruct{}
 var _ api.GatewayAPI = &GatewayStruct{}
 var _ api.WalletAPI = &WalletStruct{}
+var _ api.Sentinel = &SentinelStruct{}

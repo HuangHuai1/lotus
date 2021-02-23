@@ -10,11 +10,13 @@ import (
 
 	"github.com/filecoin-project/go-state-types/abi"
 	"github.com/filecoin-project/lotus/chain"
+	"github.com/filecoin-project/lotus/chain/events"
 	"github.com/filecoin-project/lotus/chain/exchange"
 	"github.com/filecoin-project/lotus/chain/store"
 	"github.com/filecoin-project/lotus/chain/vm"
 	"github.com/filecoin-project/lotus/chain/wallet"
 	"github.com/filecoin-project/lotus/node/hello"
+	"github.com/filecoin-project/lotus/node/impl/sentinel"
 	"github.com/filecoin-project/lotus/system"
 
 	logging "github.com/ipfs/go-log"
@@ -166,9 +168,10 @@ type Settings struct {
 
 	nodeType repo.RepoType
 
-	Online bool // Online option applied
-	Config bool // Config option applied
-	Lite   bool // Start node in "lite" mode
+	Online   bool // Online option applied
+	Config   bool // Config option applied
+	Lite     bool // Start node in "lite" mode
+	Sentinel bool // Start node in "sentinel" mode
 }
 
 func defaults() []Option {
@@ -240,9 +243,9 @@ func isType(t repo.RepoType) func(s *Settings) bool {
 
 // Online sets up basic libp2p node
 func Online() Option {
-	isFullOrLiteNode := func(s *Settings) bool { return s.nodeType == repo.FullNode }
 	isFullNode := func(s *Settings) bool { return s.nodeType == repo.FullNode && !s.Lite }
 	isLiteNode := func(s *Settings) bool { return s.nodeType == repo.FullNode && s.Lite }
+	isSentinelNode := func(s *Settings) bool { return true /*s.nodeType == repo.FullNode && s.Sentinel*/ }
 
 	return Options(
 		// make sure that online is applied before Config.
@@ -258,7 +261,7 @@ func Online() Option {
 		Override(new(*slashfilter.SlashFilter), modules.NewSlashFilter),
 
 		// Full node or lite node
-		ApplyIf(isFullOrLiteNode,
+		ApplyIf(isType(repo.FullNode),
 			// TODO: Fix offline mode
 
 			Override(new(dtypes.BootstrapPeers), modules.BuiltinBootstrap),
@@ -340,6 +343,12 @@ func Online() Option {
 			Override(RunPeerMgrKey, modules.RunPeerMgr),
 			Override(HandleIncomingMessagesKey, modules.HandleIncomingMessages),
 			Override(HandleIncomingBlocksKey, modules.HandleIncomingBlocks),
+			Override(new(api.Sentinel), From(new(sentinel.SentinelUnavailable))),
+		),
+
+		ApplyIf(isSentinelNode,
+			Override(new(*events.Events), modules.NewEvents),
+			Override(new(api.Sentinel), From(new(sentinel.SentinelAPI))),
 		),
 
 		// miner
@@ -574,6 +583,13 @@ type FullOption = Option
 func Lite(enable bool) FullOption {
 	return func(s *Settings) error {
 		s.Lite = enable
+		return nil
+	}
+}
+
+func Sentinel(enable bool) FullOption {
+	return func(s *Settings) error {
+		s.Sentinel = enable
 		return nil
 	}
 }
